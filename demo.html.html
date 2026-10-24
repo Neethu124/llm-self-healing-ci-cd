@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LLM-Guided Self-Healing CI/CD Pipeline: Interactive Walkthrough</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#161a2b;--mu:#5b6178;--bd:#dfe2ee;--ac:#4f46e5;--ok:#15803d;--bad:#c62828;--wn:#b45309;--code:#0f172a;--codetx:#e2e8f0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1020;--card:#171a30;--tx:#eceefa;--mu:#9aa1c0;--bd:#2a2e4d;--ac:#8b85ff;--ok:#4ade80;--bad:#f87171;--wn:#fbbf24;--code:#080a16}}
+:root[data-theme="dark"]{--bg:#0e1020;--card:#171a30;--tx:#eceefa;--mu:#9aa1c0;--bd:#2a2e4d;--ac:#8b85ff;--ok:#4ade80;--bad:#f87171;--wn:#fbbf24;--code:#080a16}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:1.3rem;margin:4px 0 6px}h2{font-size:1.05rem;margin:0 0 8px}
+.note{background:var(--card);border:1px solid var(--wn);border-radius:10px;padding:10px 12px;font-size:.85rem;color:var(--mu);margin:10px 0}
+.note b{color:var(--wn)}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+button{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:999px;padding:8px 14px}
+button.on{background:var(--ac);border-color:var(--ac);color:#fff}
+button:disabled{opacity:.4;cursor:default}
+.steps{display:flex;gap:4px;margin:14px 0}
+.steps div{flex:1;text-align:center;font-size:.72rem;padding:6px 2px;border-radius:8px;background:var(--card);border:1px solid var(--bd);color:var(--mu)}
+.steps div.on{background:var(--ac);color:#fff;border-color:var(--ac)}.steps div.done{color:var(--ok);border-color:var(--ok)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px}
+pre{background:var(--code);color:var(--codetx);border-radius:10px;padding:10px;font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;overflow-x:auto;margin:8px 0;white-space:pre}
+table{width:100%;border-collapse:collapse;font-size:.88rem}td{padding:5px 0;border-bottom:1px solid var(--bd)}td:first-child{color:var(--mu);width:42%}
+.tag{display:inline-block;font-size:.75rem;border-radius:6px;padding:2px 8px;border:1px solid var(--bd);color:var(--mu);margin-right:6px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.mu{color:var(--mu);font-size:.85rem}
+ul{padding-left:20px;margin:6px 0}li{margin:4px 0}
+.act{display:flex;gap:8px;align-items:flex-start;margin:8px 0}.act span:first-child{color:var(--ok)}
+.res{border-radius:10px;padding:10px 12px;margin-top:10px;font-weight:600}
+.res.s{background:rgba(34,197,94,.12);color:var(--ok)}.res.e{background:rgba(239,68,68,.12);color:var(--bad)}
+.nav{display:flex;justify-content:space-between;margin-top:14px}
+</style>
+</head>
+<body>
+<main>
+<h1>LLM-Guided Self-Healing CI/CD Pipeline</h1>
+<div class="mu">Interactive walkthrough of the system described in our project specification</div>
+<div class="note"><b>Explainer demo.</b> This page simulates the workflow with sample logs and illustrative outputs. It is not our deployed system, and no live LLM runs here. Pick a failure and step through how the pipeline detects, analyzes and recovers.</div>
+<div class="row" id="chips"></div>
+<div class="steps" id="steps"></div>
+<div class="card" id="card"></div>
+<div class="nav"><button id="back">Back</button><button id="next" class="on">Next</button></div>
+</main>
+<script>
+var S=[
+{n:"Dependency conflict",stage:"Unit Testing",err:"Dependency installation failed",
+log:["[14:25:01] INFO  Stage: unit-testing","[14:25:03] INFO  pip install -r requirements.txt","[14:25:09] ERROR Cannot install pandas==2.2.0 and numpy==2.0.1","[14:25:09] ERROR conflicting dependencies: pandas requires numpy<2.0","[14:25:09] ERROR Cannot install pandas==2.2.0 and numpy==2.0.1","[14:25:10] FATAL Dependency installation failed (exit 1)"],
+clean:["stage: unit-testing","event: dependency_install_failed","key_evidence: pandas 2.2.0 requires numpy<2.0; numpy 2.0.1 pinned","duplicates_removed: 1"],
+cls:"Dependency conflict",root:"requirements.txt pins numpy 2.0.1, which is incompatible with pandas 2.2.0.",
+plan:["Change the numpy pin to a version below 2.0","Reinstall dependencies","Re-run the failed stage"],
+acts:["Dependency correction: numpy pinned to 1.26.4","Pipeline re-execution: unit-testing stage"],tries:[["Re-run 1",1]]},
+{n:"Configuration error",stage:"Deployment",err:"Invalid configuration",
+log:["[09:10:41] INFO  Stage: deploy (production)","[09:10:42] WARN  DATABASE_URL is not set","[09:10:42] ERROR config.yaml line 14: unknown parameter replica_cout","[09:10:43] ERROR Deployment aborted: invalid configuration"],
+clean:["stage: deploy","environment: production","key_evidence: missing variable DATABASE_URL; invalid key replica_cout (line 14)"],
+cls:"Configuration error",root:"A required environment variable is missing and config.yaml has a misspelled parameter (replica_cout instead of replica_count).",
+plan:["Restore the missing variable from the environment template","Fix the parameter name","Redeploy"],
+acts:["Configuration repair: replica_cout renamed to replica_count","Configuration repair: DATABASE_URL restored from template","Pipeline re-execution: deploy stage"],tries:[["Re-run 1",1]]},
+{n:"Infrastructure issue",stage:"Build",err:"Container crashed",
+log:["[18:02:11] INFO  Stage: build","[18:02:40] WARN  CPU utilization 85%","[18:03:02] ERROR container build-runner-7 terminated: OOMKilled","[18:03:02] ERROR Build interrupted"],
+clean:["stage: build","event: container_oom_killed","key_evidence: build-runner-7 out of memory; CPU 85%"],
+cls:"Infrastructure issue",root:"The build runner ran out of memory under high load, so the container was killed mid-build.",
+plan:["Restart the build runner service","Restore a clean environment","Re-run the build"],
+acts:["Service restart: build-runner-7","Environment restoration: clean workspace","Pipeline re-execution: build stage"],tries:[["Re-run 1",0],["Re-run 2",1]]},
+{n:"Failed tests",stage:"Unit Testing",err:"3 tests failed",
+log:["[11:40:20] INFO  Stage: unit-testing","[11:40:55] ERROR test_refund_total FAILED","[11:40:55] ERROR test_tax_rounding FAILED","[11:40:56] ERROR test_discount_cap FAILED","[11:40:56] FATAL 3 failed, 61 passed"],
+clean:["stage: unit-testing","event: test_failures","key_evidence: 3 failures in billing tests, 61 passed"],
+cls:"Failed test cases",root:"Assertion failures in billing logic. This looks like a code defect, not an environment problem.",
+plan:["Re-run the tests once to rule out flakiness","If they still fail, stop and escalate"],
+acts:["Pipeline re-execution: unit-testing stage"],tries:[["Re-run 1",0],["Re-run 2",0]]}
+];
+var si=0,st=0,names=["Collect","Prepare","Analyze","Recover","Validate"];
+function esc(t){return t.replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+function ok(s){return s.tries[s.tries.length-1][1]===1}
+function body(s){
+if(st==0)return "<h2>1. Log collection</h2><table><tr><td>Pipeline</td><td>Build-and-Deploy Pipeline</td></tr><tr><td>Status</td><td class='bad'>Failed</td></tr><tr><td>Failure stage</td><td>"+s.stage+"</td></tr><tr><td>Error</td><td>"+s.err+"</td></tr></table><p class='mu'>The monitoring module gathers build logs, test reports, deployment records, configuration files and runtime events.</p><pre>"+esc(s.log.join("\n"))+"</pre>";
+if(st==1)return "<h2>2. Log preprocessing</h2><ul><li>Cleaning and normalization</li><li>Duplicate removal</li><li>Timestamp alignment and context grouping</li></ul><p class='mu'>The LLM receives structured input instead of raw noise:</p><pre>"+esc(s.clean.join("\n"))+"</pre>";
+if(st==2)return "<h2>3. LLM-based failure analysis</h2><p><span class='tag'>Illustrative output</span></p><table><tr><td>Classification</td><td><b>"+s.cls+"</b></td></tr><tr><td>Root cause</td><td>"+s.root+"</td></tr></table><p><b>Remediation plan</b></p><ul>"+s.plan.map(function(p){return "<li>"+p+"</li>"}).join("")+"</ul><p class='mu'>The idea is contextual understanding of the logs rather than simple keyword matching.</p>";
+if(st==3)return "<h2>4. Automated recovery</h2><p class='mu'>The recovery module, not the LLM, executes the actions.</p>"+s.acts.map(function(a){return "<div class='act'><span>&#10003;</span><span>"+a+"</span></div>"}).join("");
+return "<h2>5. Validation and outcome</h2>"+s.tries.map(function(t){return "<div class='act'><span class='"+(t[1]?"ok":"bad")+"'>"+(t[1]?"&#10003;":"&#10007;")+"</span><span>"+t[0]+": "+(t[1]?"all stages passed":"still failing, analysis repeated")+"</span></div>"}).join("")+(ok(s)?"<div class='res s'>Pipeline successful. Dashboard and metrics updated.</div>":"<div class='res e'>Failure persists after retries. Escalated to a DevOps engineer.</div>")+"<p class='mu'>The corrected pipeline is re-run. If the problem persists, analysis repeats until the pipeline recovers or the failure is escalated for manual intervention.</p>";
+}
+function render(){
+var s=S[si];
+document.getElementById("chips").innerHTML=S.map(function(x,i){return "<button class='"+(i==si?"on":"")+"' onclick='pick("+i+")'>"+x.n+"</button>"}).join("");
+document.getElementById("steps").innerHTML=names.map(function(n,i){return "<div class='"+(i==st?"on":i<st?"done":"")+"'>"+(i+1)+". "+n+"</div>"}).join("");
+document.getElementById("card").innerHTML=body(s);
+document.getElementById("back").disabled=st==0;
+var nx=document.getElementById("next");nx.disabled=st==4;
+}
+function pick(i){si=i;st=0;render()}
+document.getElementById("back").onclick=function(){if(st>0){st--;render()}};
+document.getElementById("next").onclick=function(){if(st<4){st++;render()}};
+render();
+</script>
+</body>
+</html>
